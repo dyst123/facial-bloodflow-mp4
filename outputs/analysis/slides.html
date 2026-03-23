@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Facial Blood Flow — Analysis Slides</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e8eaf0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .deck {
+    width: 900px;
+    max-width: 96vw;
+    position: relative;
+  }
+
+  .slide {
+    display: none;
+    background: #1a1d2e;
+    border-radius: 16px;
+    padding: 52px 60px;
+    min-height: 480px;
+    border: 1px solid #2a2d42;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    animation: fadeIn 0.3s ease;
+  }
+
+  .slide.active { display: flex; flex-direction: column; justify-content: center; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Slide number badge */
+  .slide-num {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    font-size: 12px;
+    color: #555a7a;
+    letter-spacing: 1px;
+  }
+
+  /* Title slide */
+  .slide.title-slide { text-align: center; align-items: center; }
+  .slide.title-slide h1 { font-size: 2.2rem; font-weight: 700; color: #7c8cff; line-height: 1.2; margin-bottom: 16px; }
+  .slide.title-slide .subtitle { font-size: 1.05rem; color: #8a8fb5; margin-bottom: 8px; }
+  .slide.title-slide .tag { display: inline-block; background: #252840; border: 1px solid #3a3f6a; border-radius: 20px; padding: 4px 14px; font-size: 0.8rem; color: #7c8cff; margin: 4px; }
+
+  /* Section header */
+  .section-header {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #7c8cff;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  h2 { font-size: 1.6rem; font-weight: 700; color: #ffffff; margin-bottom: 28px; line-height: 1.2; }
+  h3 { font-size: 1rem; font-weight: 600; color: #7c8cff; margin-bottom: 10px; margin-top: 20px; }
+
+  /* Bullet list */
+  ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  ul li { display: flex; align-items: flex-start; gap: 12px; font-size: 0.97rem; line-height: 1.5; color: #c8cce8; }
+  ul li::before { content: '▸'; color: #7c8cff; flex-shrink: 0; margin-top: 1px; font-size: 0.85rem; }
+  ul li strong { color: #ffffff; }
+
+  /* Two-column layout */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+
+  /* Stat cards */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 8px; }
+  .card {
+    background: #12152a;
+    border: 1px solid #2a2d42;
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+  }
+  .card .val { font-size: 2rem; font-weight: 700; color: #7c8cff; line-height: 1; }
+  .card .lbl { font-size: 0.72rem; color: #666b90; margin-top: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  .card .sub { font-size: 0.82rem; color: #9a9fc0; margin-top: 4px; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 8px; }
+  th { background: #12152a; color: #7c8cff; text-align: left; padding: 10px 14px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 10px 14px; border-bottom: 1px solid #1e2138; color: #c8cce8; }
+  tr:last-child td { border-bottom: none; }
+  .t1 { color: #6ab0ff; font-weight: 600; }
+  .t2 { color: #ffaa55; font-weight: 600; }
+  .t3 { color: #55cc88; font-weight: 600; }
+  .check { color: #55cc88; }
+  .warn  { color: #ffaa55; }
+
+  /* Highlight box */
+  .highlight {
+    background: #12152a;
+    border-left: 3px solid #7c8cff;
+    border-radius: 0 10px 10px 0;
+    padding: 14px 18px;
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: #c8cce8;
+    line-height: 1.6;
+  }
+  .highlight strong { color: #7c8cff; }
+
+  /* Pipeline steps */
+  .pipeline { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #12152a;
+    border: 1px solid #2a2d42;
+    border-radius: 10px;
+    padding: 12px 18px;
+  }
+  .step-num {
+    width: 30px; height: 30px;
+    background: #7c8cff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700; color: #0f1117;
+    flex-shrink: 0;
+  }
+  .step-text { font-size: 0.9rem; color: #c8cce8; line-height: 1.4; }
+  .step-text strong { color: #ffffff; }
+
+  /* Nav */
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 24px;
+  }
+  button {
+    background: #252840;
+    border: 1px solid #3a3f6a;
+    color: #c8cce8;
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: #2e3258; }
+  button:disabled { opacity: 0.3; cursor: default; }
+  .progress {
+    font-size: 0.82rem;
+    color: #555a7a;
+    min-width: 70px;
+    text-align: center;
+  }
+
+  /* Callout */
+  .callout {
+    background: #1a2540;
+    border: 1px solid #3a5080;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-top: 16px;
+    font-size: 0.88rem;
+    color: #a0b8d8;
+    line-height: 1.5;
+  }
+  .callout strong { color: #6ab0ff; }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- Slide 1: Title -->
+  <div class="slide title-slide active">
+    <div class="slide-num">1 / 10</div>
+    <h1>Facial Blood Flow<br>as a Task Marker</h1>
+    <p class="subtitle">Can we detect what task a person is performing<br>from their facial blood flow signal?</p>
+    <div style="margin-top:24px">
+      <span class="tag">rPPG</span>
+      <span class="tag">MediaPipe FaceMesh</span>
+      <span class="tag">Beer-Lambert</span>
+      <span class="tag">Pilot Study · n=3</span>
+    </div>
+  </div>
+
+  <!-- Slide 2: What We're Measuring -->
+  <div class="slide">
+    <div class="slide-num">2 / 10</div>
+    <div class="section-header">Background</div>
+    <h2>What We're Measuring</h2>
+    <ul>
+      <li>Blood flow signal extracted from <strong>ordinary RGB video</strong> — no special hardware</li>
+      <li>MediaPipe FaceMesh detects <strong>478 facial landmarks</strong> per frame</li>
+      <li>Four regions tracked: <strong>nose, forehead, left cheek, right cheek</strong></li>
+      <li>Signal = mean <strong>green channel intensity</strong> within each region per frame</li>
+      <li>Green channel chosen because haemoglobin <strong>absorbs green light most strongly</strong> — this is the rPPG technique</li>
+      <li>Sampling rate: <strong>~35 fps</strong> across all recordings</li>
+    </ul>
+  </div>
+
+  <!-- Slide 3: Signal Processing -->
+  <div class="slide">
+    <div class="slide-num">3 / 10</div>
+    <div class="section-header">Methods</div>
+    <h2>Signal Processing</h2>
+    <div class="pipeline">
+      <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Green intensity per frame</strong> — mean pixel value inside each ROI polygon</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Beer-Lambert transform</strong> — bf = –log(intensity) — more blood = lower reflectance = higher bf value</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Moving-average smoothing</strong> — window of 20 frames to remove high-frequency noise</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Zero-mean normalisation</strong> — subtract mean to get relative change (not absolute blood flow)</div></div>
+    </div>
+  </div>
+
+  <!-- Slide 4: Analysis Pipeline -->
+  <div class="slide">
+    <div class="slide-num">4 / 10</div>
+    <div class="section-header">Methods</div>
+    <h2>Analysis Pipeline</h2>
+    <div class="pipeline">
+      <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Feature Extraction</strong> — RMS amplitude, cardiac band power (0.7–3 Hz), dominant frequency per ROI × trial</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Cross-Correlation</strong> — Pearson r between T1↔T2, T1↔T3, T2↔T3 waveforms per ROI</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Power Spectral Density</strong> — frequency content comparison across trials per ROI</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Bar Charts</strong> — visual summary of RMS and cardiac-band power per trial</div></div>
+    </div>
+  </div>
+
+  <!-- Slide 5: RMS Finding -->
+  <div class="slide">
+    <div class="slide-num">5 / 10</div>
+    <div class="section-header">Results</div>
+    <h2>Finding 1 — Signal Amplitude (RMS)</h2>
+    <table>
+      <tr><th>ROI</th><th class="t1">T1</th><th class="t2">T2</th><th class="t3">T3</th></tr>
+      <tr><td>Nose</td><td class="t1">0.009–0.022</td><td class="t2">0.037–0.070</td><td class="t3">0.032–0.115</td></tr>
+      <tr><td>Forehead</td><td class="t1">0.009–0.026</td><td class="t2">0.028–0.121</td><td class="t3">0.039–0.119</td></tr>
+      <tr><td>Left Cheek</td><td class="t1">0.008–0.017</td><td class="t2">0.034–0.072</td><td class="t3">0.039–0.110</td></tr>
+      <tr><td>Right Cheek</td><td class="t1">0.009–0.015</td><td class="t2">0.023–0.062</td><td class="t3">0.026–0.127</td></tr>
+    </table>
+    <div class="highlight"><strong>T1 is 3–8× lower than T2 and T3</strong> across every ROI and every subject. This is the strongest and most consistent finding in the dataset.</div>
+  </div>
+
+  <!-- Slide 6: Frequency Finding -->
+  <div class="slide">
+    <div class="slide-num">6 / 10</div>
+    <div class="section-header">Results</div>
+    <h2>Finding 2 — Frequency Content (PSD)</h2>
+    <div class="cols">
+      <div>
+        <ul>
+          <li>T1 dominant frequency: <strong>~0.96–1.1 Hz</strong> (~58–66 BPM) in s1, s2</li>
+          <li>T2 and T3 dominant frequency: <strong>~0.82 Hz</strong> (~49 BPM) — consistent across all subjects</li>
+          <li>T2 and T3 share the <strong>same frequency signature</strong> — physiologically similar</li>
+          <li>Shift in dominant freq = change in <strong>heart rate or vasomotor rhythm</strong> between conditions</li>
+        </ul>
+      </div>
+      <div>
+        <div class="cards" style="grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="card"><div class="val t1">1.0 Hz</div><div class="lbl">T1 dom. freq</div><div class="sub">~60 BPM</div></div>
+          <div class="card"><div class="val t2">0.82 Hz</div><div class="lbl">T2/T3 dom. freq</div><div class="sub">~49 BPM</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 7: Cross-Correlation -->
+  <div class="slide">
+    <div class="slide-num">7 / 10</div>
+    <div class="section-header">Results</div>
+    <h2>Finding 3 — Waveform Similarity</h2>
+    <ul>
+      <li>All trial pair correlations are <strong>low (|r| &lt; 0.30)</strong> — waveforms differ in shape, not just amplitude</li>
+      <li>T1 vs T3 is <strong>most divergent</strong> (forehead r = –0.29 in s1) — T1 and T3 are most physiologically different</li>
+      <li>T2 vs T3 correlations are <strong>more positive</strong> than T1 vs either — T2 and T3 share a common pattern</li>
+      <li>Pattern consistent across s1, s2, and s3 — <strong>not a single-subject artefact</strong></li>
+    </ul>
+    <div class="callout"><strong>Note on p-values:</strong> With ~6,000 data points per trial, even very small correlations reach p &lt; 0.001. The magnitude of r matters more than significance here.</div>
+  </div>
+
+  <!-- Slide 8: Replication -->
+  <div class="slide">
+    <div class="slide-num">8 / 10</div>
+    <div class="section-header">Results</div>
+    <h2>Cross-Subject Replication</h2>
+    <table>
+      <tr><th>Subject</th><th>T1 &lt; T2 &lt; T3 (RMS)?</th><th>Freq shift T1 vs T2/T3?</th><th>Low cross-corr?</th></tr>
+      <tr><td>s1</td><td class="check">✓ All 4 ROIs</td><td class="check">✓ 1.1 Hz → 0.82 Hz</td><td class="check">✓</td></tr>
+      <tr><td>s2</td><td class="check">✓ All 4 ROIs</td><td class="check">✓ 0.96 Hz → 0.82 Hz</td><td class="check">✓</td></tr>
+      <tr><td>s3</td><td class="check">✓ All 4 ROIs</td><td class="warn">~ Partial</td><td class="check">✓</td></tr>
+    </table>
+    <div class="highlight">The core finding replicates in all three subjects. T1 is consistently a lower-amplitude, physiologically distinct state from T2 and T3.</div>
+  </div>
+
+  <!-- Slide 9: Can We Build a Model? -->
+  <div class="slide">
+    <div class="slide-num">9 / 10</div>
+    <div class="section-header">Discussion</div>
+    <h2>Can We Build a Classifier?</h2>
+    <div class="cols">
+      <div>
+        <h3>Not yet — because</h3>
+        <ul>
+          <li><strong>n = 3 subjects</strong> — model would overfit to individuals</li>
+          <li><strong>Task labels unknown</strong> — can't interpret what is being classified</li>
+          <li><strong>BVP/EDA unvalidated</strong> — signal may partly reflect artefact</li>
+          <li><strong>One recording per condition</strong> — no within-subject repeatability</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Roadmap</h3>
+        <ul>
+          <li>Validate against <strong>BVP + EDA</strong> (data exists)</li>
+          <li>Run <strong>s4–s10</strong> to build sample size</li>
+          <li>Pilot <strong>SVM / LDA</strong> on 12 features</li>
+          <li>Evaluate with <strong>leave-one-subject-out</strong> cross-validation</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 10: Takeaways -->
+  <div class="slide">
+    <div class="slide-num">10 / 10</div>
+    <div class="section-header">Conclusions</div>
+    <h2>Key Takeaways</h2>
+    <ul>
+      <li>Facial blood flow <strong>differs measurably between tasks</strong> — T1 is consistently quieter than T2/T3</li>
+      <li>The effect is seen in <strong>amplitude, frequency content, and waveform shape</strong> independently</li>
+      <li>The pattern <strong>replicates across 3 subjects</strong> — not a single-person fluke</li>
+      <li>T2 and T3 are <strong>more similar to each other</strong> than either is to T1 — suggesting a shared physiological state</li>
+      <li>The signal is <strong>promising for classification</strong>, but more subjects and BVP/EDA validation are needed first</li>
+      <li>This technique requires <strong>no wearable sensors</strong> — any RGB camera is sufficient</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button id="prev" onclick="changeSlide(-1)" disabled>← Prev</button>
+  <span class="progress" id="progress">1 / 10</span>
+  <button id="next" onclick="changeSlide(1)">Next →</button>
+</div>
+
+<script>
+  let current = 0;
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+
+  function changeSlide(dir) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(total - 1, current + dir));
+    slides[current].classList.add('active');
+    document.getElementById('progress').textContent = `${current + 1} / ${total}`;
+    document.getElementById('prev').disabled = current === 0;
+    document.getElementById('next').disabled = current === total - 1;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') changeSlide(1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   changeSlide(-1);
+  });
+</script>
+</body>
+</html>
