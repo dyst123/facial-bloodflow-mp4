@@ -1,0 +1,234 @@
+import cv2
+import numpy as np
+from tqdm import tqdm
+from PIL import Image, ImageDraw
+from scipy.spatial import distance as dist
+from multiprocessing import Process, Queue
+
+from facemeshmodule_new import FaceMeshDetector
+from chestROIReverseEngineering import ChestROI
+
+
+class FaceProcessing:
+    def __init__(self,
+                 file_path,
+                 interval_start,
+                 interval_end,
+                 intervalMode=False,
+                 visualize_FaceMesh=False,
+                 visualize_ROIs=False,
+                 static_image_mode=False,
+                 image_width=804,
+                 image_height=672,
+                 fps=10,
+                 getRR=False):
+
+        self.face_mesh_detector = None
+
+        # Filename of the input file containing raw data
+        self.filepath = file_path
+
+        self.intervalMode = intervalMode
+        self.interval_start = interval_start
+        self.interval_end = interval_end
+
+        self.image_width = image_width
+        self.image_height = image_height
+        self.fps = fps
+
+        self.visualize_FaceMesh = visualize_FaceMesh
+        self.visualize_ROI = visualize_ROIs
+
+        # Flag to get respiratory rate (True or False)
+        self.getRR = getRR
+
+        # Chest intensity and depth values will be stored in these lists
+        self.chest_intensities = []
+        self.chest_depths = []
+        self.RR = None  # Stores final respiratory rate
+        self.breathCount = None  # Stores breath count in clip
+
+        # Controls for all tweaks to calculations
+        self.static_image_mode = static_image_mode
+        self.face_roi_definitions = {
+            'nose': np.array([196, 419, 455, 235]),
+            'nose2': np.array([122, 6, 440, 115]),
+            'forehead': np.array([109, 338, 9]),
+            'right_cheek': np.array([436, 346, 343, 344]),
+            'left_cheek': np.array([129, 121, 117, 216]),
+            'cheek_n_nose': np.array([117, 346, 411, 187]),
+            'low_forehead': np.array([108, 337, 8]),
+            'left_eye': np.array([33, 160, 159, 158, 133, 153, 145, 144]),
+            'right_eye': np.array([263, 387, 386, 385, 362, 380, 374, 373])
+        }
+
+        self.eye_centers = {'left': [], 'right': []}
+
+    def process_batches(self, batch_size=8, visualize_ROI=False, visualize_FaceMesh=False):
+        """
+        This function processes the batches of frames in the MP4 file and 
+        calculates the average intensity and depth values for the regions of 
+        interest (ROIs) defined in the self.face_roi_definitions dictionary.
+
+        Parameters
+        ----------
+        batch_size : int, default=8
+            Number of frames to process in each batch.
+        visualize_ROI : bool, default=False
+            If True, displays the ROIs on the frame.
+        visualize_FaceMesh : bool, default=False
+            If True, displays the face mesh on the frame.
+
+        Returns
+        -------
+        intensity_avg : np.ndarray
+            2D array of average intensity values for each frame in the clip.
+        depth_avg : np.ndarray
+            2D array of average depth values for each frame in the clip.
+        chest_depths : list
+            List of average chest depth values for each frame in the clip.
+        all_ear_values : np.ndarray
+            1D array of eye aspect ratio (EAR) values for each frame in the clip.
+        fbf_depth_avg : np.ndarray
+            2D array of average depth values for each frame in the clip for facial blood flow.
+        fbf_intensity_avg : np.ndarray 
+            2D array of average intensity values for each frame in the clip for facial blood flow.
+        total_frames : int 
+            Total number of frames in the clip.
+        """
+
+        cap = cv2.VideoCapture(self.filepath)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        print(f"Number of frames in the clip: {total_frames}")
+
+        self.face_mesh_detector = FaceMeshDetector(static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+        intensity_avg = np.zeros((1, total_frames))
+        depth_avg = np.zeros((1, total_frames))
+        rgb_avg = np.zeros((total_frames, 3))
+        fbf_intensity_avg = np.zeros((4, total_frames))
+        fbf_depth_avg = np.zeros((4, total_frames))
+
+        all_ear_values = np.zeros((1, total_frames))
+
+        chest_detector = ChestROI()
+
+        with tqdm(total=total_frames) as pbar:
+            frame_i = 0
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # Simulate depth and intensity data for the sake of processing
+                intensity = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                depth = np.random.rand(*intensity.shape)  # Placeholder for depth data
+
+                image_height, image_width = intensity.shape
+                i_grayscale = self.intensity_to_grayscale(intensity)
+                i_rgb = cv2.cvtColor(i_grayscale, cv2.COLOR_GRAY2RGB)
+
+                face_detected, landmarks_pixels = self.face_mesh_detector.find_face_mesh(image=i_rgb, draw=visualize_FaceMesh)
+                assert face_detected, "Assertion failed! Face not detected!"
+
+                bb_pixels = self.get_bounding_box('cheek_n_nose', landmarks_pixels)
+                pixels_in_ROI = self.get_pixels_in_ROI(bb_pixels, image_height, image_width)
+
+                intensity_avg[0, frame_i], depth_avg[0, frame_i], rgb_avg[frame_i] = self.avg_vals(pixels_in_ROI, depth, intensity, frame)
+
+                # Calculate EAR and other metrics
+                ear = self.detect_blinks_and_perclos(landmarks_pixels)
+                all_ear_values[0, frame_i] = ear
+
+                if self.getRR:
+                    chest_ROIs = chest_detector._Chest_ROI_extract(image=i_rgb, face_landmarks=landmarks_pixels, draw=True)
+                    self.chestCalculations(chest_ROIs, depth)
+
+                # Facial Blood Flow calculations
+                forehead_pixels = self.get_bounding_box('forehead', landmarks_pixels)
+                nose_pixels = self.get_bounding_box('nose', landmarks_pixels)
+
+                pixels_in_ROI_forehead = self.get_pixels_in_ROI(forehead_pixels, image_height, image_width)
+                pixels_in_ROI_nose = self.get_pixels_in_ROI(nose_pixels, image_height, image_width)
+
+                fbf_intensity_avg[0, frame_i], fbf_depth_avg[0, frame_i], _ = self.avg_vals(pixels_in_ROI_nose, depth, intensity, frame)
+                fbf_intensity_avg[1, frame_i], fbf_depth_avg[1, frame_i], _ = self.avg_vals(pixels_in_ROI_forehead, depth, intensity, frame)
+
+                if self.visualize_ROI:
+                    self.draw_bounding_boxes(bb_pixels, frame, 'cheek_n_nose')
+
+                pbar.update(1)
+                frame_i += 1
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+        rgb_avg = rgb_avg.T
+        return intensity_avg, depth_avg, rgb_avg, self.chest_depths, all_ear_values, fbf_depth_avg, fbf_intensity_avg, total_frames
+
+    def avg_vals(self, pixels, d, i, rgb):
+        avg_i = np.average(i[np.where(pixels > 0)])
+        avg_d = np.average(d[np.where(pixels > 0)])
+        avg_rgb = np.zeros(3)
+        for channel in range(3):
+            avg_rgb[channel] = np.average(rgb[:, :, channel][np.where(pixels > 0)])
+        return avg_i, avg_d, avg_rgb
+
+    def get_bounding_box(self, roi_name, landmarks_pixels):
+        landmark_indices = self.face_roi_definitions[roi_name]
+        bounding_box_pixels = landmarks_pixels[landmark_indices]
+        return bounding_box_pixels
+
+    def draw_bounding_boxes(self, bounding_box_pixels, frame, roi_name):
+        cv2.polylines(frame, [bounding_box_pixels], isClosed=True, color=(0, 0, 255), thickness=2)
+        text_position = (bounding_box_pixels[0][0], bounding_box_pixels[0][1] - 10)
+        cv2.putText(frame, roi_name, text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.imshow("ROI Bounding Boxes", frame)
+        cv2.waitKey(1)
+        return
+
+    def get_pixels_in_ROI(self, b_pixels, h, w):
+        mask_canvas = Image.new('L', (w, h), 0)
+        pixels_passed_in = list(map(tuple, b_pixels.tolist()))
+        ImageDraw.Draw(mask_canvas).polygon(pixels_passed_in, fill=1, outline=1, width=1)
+        pixels_in_ROI = np.array(mask_canvas)
+        return pixels_in_ROI
+
+    def intensity_to_grayscale(self, intensity):
+        divisor = 2
+        grayscale_img = intensity.astype(float) / divisor
+        grayscale_img[np.where(grayscale_img > 255)] = 255
+        return grayscale_img.astype('uint8')
+
+    def detect_blinks_and_perclos(self, landmarks_pixels):
+        left_eye_indices = self.face_roi_definitions['left_eye']
+        right_eye_indices = self.face_roi_definitions['right_eye']
+
+        left_eye = landmarks_pixels[left_eye_indices]
+        right_eye = landmarks_pixels[right_eye_indices]
+
+        left_ear = self.eye_aspect_ratio(left_eye)
+        right_ear = self.eye_aspect_ratio(right_eye)
+
+        ear = (left_ear + right_ear) / 2.0  # Average EAR for both eyes
+        return ear
+
+    def eye_aspect_ratio(self, eye):
+        A = dist.euclidean(eye[1], eye[7])
+        B = dist.euclidean(eye[2], eye[6])
+        C = dist.euclidean(eye[3], eye[5])
+        D = dist.euclidean(eye[0], eye[4])
+        ear = (A + B + C) / (3.0 * D)
+        return ear
+
+    def chestCalculations(self, corner_landmarks, depth):
+        chest_ROI_upper_pixels = corner_landmarks[0].astype(np.int32)
+        chest_ROI_lower_pixels = corner_landmarks[1].astype(np.int32)
+        chest_ROI_upper_pixels_in_ROI = self.get_pixels_in_ROI(chest_ROI_upper_pixels, self.image_height, self.image_width)
+        chest_ROI_lower_pixels_in_ROI = self.get_pixels_in_ROI(chest_ROI_lower_pixels, self.image_height, self.image_width)
+
+        chest_ROI_upper_average_depth = np.average(depth[np.where(chest_ROI_upper_pixels_in_ROI > 0)])
+        chest_ROI_lower_average_depth = np.average(depth[np.where(chest_ROI_lower_pixels_in_ROI > 0)])
+
+        self.chest_depths.append(chest_ROI_upper_average_depth)

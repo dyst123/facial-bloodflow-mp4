@@ -1,0 +1,13 @@
+ROI,Pair,Pearson_r,p_value
+nose,T1 vs T2,-0.0231,0.065684
+nose,T1 vs T3,0.0035,0.783723
+nose,T2 vs T3,-0.1555,0.0
+forehead,T1 vs T2,-0.2623,0.0
+forehead,T1 vs T3,-0.0753,0.0
+forehead,T2 vs T3,-0.2225,0.0
+left_cheek,T1 vs T2,-0.1992,0.0
+left_cheek,T1 vs T3,-0.0991,0.0
+left_cheek,T2 vs T3,-0.2,0.0
+right_cheek,T1 vs T2,-0.0154,0.220964
+right_cheek,T1 vs T3,-0.2045,0.0
+right_cheek,T2 vs T3,-0.0124,0.324296
